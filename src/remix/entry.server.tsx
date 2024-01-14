@@ -1,8 +1,7 @@
 import type { AppLoadContext, EntryContext } from "@remix-run/node"
 import { RemixServer } from "@remix-run/react"
 import isbot from "isbot"
-// @ts-expect-error - bun throws an error if you try to import react-dom/server
-import { renderToReadableStream } from "react-dom/server.node"
+import { renderToReadableStream } from "react-dom/server"
 
 const ABORT_DELAY = 5_000
 
