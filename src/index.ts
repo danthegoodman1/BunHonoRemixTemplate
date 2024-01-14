@@ -44,7 +44,6 @@ app.use(async (c, next) => {
 if (process.env.HTTP_LOG === "1") {
   logger.debug("using HTTP logger")
   app.use(async (c, next) => {
-    c.status
     logger.info(
       {
         method: c.req.method,
