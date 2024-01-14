@@ -1,10 +1,10 @@
-import * as dotenv from 'dotenv'
+import * as dotenv from "dotenv"
 dotenv.config()
 
-import { Hono } from 'hono'
-import { v4 as uuidv4 } from 'uuid'
+import { Hono } from "hono"
+import { v4 as uuidv4 } from "uuid"
 
-import { logger } from './logger/index'
+import { logger } from "./logger/index"
 import { broadcastDevReady } from "@remix-run/node"
 
 import sourceMapSupport from "source-map-support"
@@ -13,9 +13,10 @@ sourceMapSupport.install()
 // import * as build from "@remix-run/dev/server-build"
 import * as build from "../build/index.js"
 import { remix } from "remix-hono/handler"
-import { cors } from 'hono/cors'
+import { cors } from "hono/cors"
+import { serveStatic } from "hono/bun"
 
-const listenPort = process.env.PORT || '8080'
+const listenPort = process.env.PORT || "8080"
 
 declare global {
   namespace NodeJS {
@@ -26,28 +27,51 @@ declare global {
   }
 }
 
+declare module "hono" {
+  interface ContextVariableMap {
+    requestID: string
+  }
+}
+
 const app = new Hono()
 app.use(cors())
-app.use("*", remix({ build: build as any, mode: process.env.NODE_ENV as any }))
 
-// app.use((req, res, next) => {
-//   const reqID = uuidv4()
-//   req.id = reqID
-//   next()
-// })
+app.use(async (c, next) => {
+  c.set("requestID", uuidv4())
+  await next()
+})
 
-// if (process.env.HTTP_LOG === "1") {
-//   logger.debug("using HTTP logger")
-//   app.use((req: any, res, next) => {
-//     req.log.info({ req })
-//     res.on("finish", () => req.log.info({ res }))
-//     next()
-//   })
-// }
+if (process.env.HTTP_LOG === "1") {
+  logger.debug("using HTTP logger")
+  app.use(async (c, next) => {
+    c.status
+    logger.info(
+      {
+        method: c.req.method,
+        url: c.req.url,
+        id: c.get("requestID"),
+      },
+      "http request"
+    )
+    await next()
+    logger.info(
+      {
+        method: c.req.method,
+        url: c.req.url,
+        id: c.get("requestID"),
+        status: c.res.status,
+      },
+      "http response"
+    )
+  })
+}
 
-app.get('/hc', (c) => {
+app.get("/hc", (c) => {
   return c.text("ok")
 })
+
+app.use("/build/*", serveStatic({ root: "./public" }))
+app.use("*", remix({ build: build as any, mode: process.env.NODE_ENV as any }))
 
 if (process.env.NODE_ENV === "development") {
   broadcastDevReady(build as any)
@@ -55,6 +79,6 @@ if (process.env.NODE_ENV === "development") {
 logger.info(`API listening on port ${listenPort}`)
 
 export default {
-  port: process.env.PORT || '8080',
-  fetch: app.fetch
+  port: process.env.PORT || "8080",
+  fetch: app.fetch,
 }
