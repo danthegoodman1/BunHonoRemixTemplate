@@ -1,7 +1,6 @@
 import * as dotenv from "dotenv"
 dotenv.config()
 
-import { Hono } from "hono"
 import { v4 as uuidv4 } from "uuid"
 
 import { logger } from "./logger/index"
@@ -12,73 +11,83 @@ sourceMapSupport.install()
 
 // import * as build from "@remix-run/dev/server-build"
 import * as build from "../build/index.js"
-import { remix } from "remix-hono/handler"
-import { cors } from "hono/cors"
-import { serveStatic } from "hono/bun"
+import Elysia from "elysia"
 
 const listenPort = process.env.PORT || "8080"
 
 declare global {
   namespace NodeJS {
     interface ProcessEnv {
-      API_TOKEN: string
+      HTTP_LOG?: string
       DSN: string
     }
   }
 }
 
-declare module "hono" {
-  interface ContextVariableMap {
-    requestID: string
+const app = new Elysia().decorate("requestID", uuidv4()).derive((c) => {
+  return {
+    logger: logger.child({
+      requestID: c.requestID
+    })
   }
-}
-
-const app = new Hono()
-app.use(cors())
-
-app.use(async (c, next) => {
-  c.set("requestID", uuidv4())
-  await next()
-})
-
-if (process.env.HTTP_LOG === "1") {
-  logger.debug("using HTTP logger")
-  app.use(async (c, next) => {
-    c.status
+}).onRequest((c) => {
+  if (process.env.HTTP_LOG === "1") {
     logger.info(
       {
-        method: c.req.method,
-        url: c.req.url,
-        id: c.get("requestID"),
+        method: c.request.method,
+        url: c.request.url,
+        id: c.requestID,
       },
       "http request"
     )
-    await next()
+  }
+}).onAfterHandle((c) => {
+  if (process.env.HTTP_LOG === "1") {
     logger.info(
       {
-        method: c.req.method,
-        url: c.req.url,
-        id: c.get("requestID"),
-        status: c.res.status,
+        method: c.request.method,
+        url: c.request.url,
+        id: c.requestID,
+        status: (c.response as Response).status,
       },
       "http response"
     )
-  })
-}
-
-app.get("/hc", (c) => {
-  return c.text("ok")
+  }
 })
 
-app.use("/build/*", serveStatic({ root: "./public" }))
-app.use("*", remix({ build: build as any, mode: process.env.NODE_ENV as any }))
+app.get("/hc", (c) => {
+  return new Response("ok")
+})
+
+// app.use("/build/*", serveStatic({ root: "./public" }))
+// app.use("*", remix({ build: build as any, mode: process.env.NODE_ENV as any }))
 
 if (process.env.NODE_ENV === "development") {
   broadcastDevReady(build as any)
 }
+
+
+app.listen(listenPort)
 logger.info(`API listening on port ${listenPort}`)
 
-export default {
-  port: process.env.PORT || "8080",
-  fetch: app.fetch,
+const signals = {
+  SIGHUP: 1,
+  SIGINT: 2,
+  SIGTERM: 15,
 }
+
+let stopping = false
+
+Object.keys(signals).forEach((signal) => {
+  process.on(signal, async () => {
+    if (stopping) {
+      return
+    }
+    stopping = true
+    logger.info(`Received signal ${signal}, shutting down...`)
+    logger.info("exiting...")
+    await app.stop()
+    logger.flush() // pino actually fails to flush, even with awaiting on a callback
+    process.exit(0)
+  })
+})
