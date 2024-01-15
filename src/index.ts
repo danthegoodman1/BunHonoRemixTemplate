@@ -83,7 +83,7 @@ if (process.env.NODE_ENV === "development") {
 }
 logger.info(`API listening on port ${listenPort}`)
 
-Bun.serve({
+const server = Bun.serve({
   port: process.env.PORT || "8080",
   fetch: (req: Request, server: Server) => {
     if (server.upgrade(req, {
@@ -104,4 +104,26 @@ Bun.serve({
       console.log("websocket opened", ws.data)
     },
   },
+})
+
+const signals = {
+  SIGHUP: 1,
+  SIGINT: 2,
+  SIGTERM: 15,
+}
+
+let stopping = false
+
+Object.keys(signals).forEach((signal) => {
+  process.on(signal, async () => {
+    if (stopping) {
+      return
+    }
+    stopping = true
+    logger.info(`Received signal ${signal}, shutting down...`)
+    logger.info("exiting...")
+    logger.flush() // pino actually fails to flush, even with awaiting on a callback
+    server.stop()
+    process.exit(0)
+  })
 })

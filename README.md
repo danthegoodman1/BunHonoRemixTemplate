@@ -1,1 +1,1 @@
-# BunElysiaRemixTemplate
+# BunHonoRemixTemplate
