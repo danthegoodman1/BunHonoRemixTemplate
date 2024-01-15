@@ -71,8 +71,16 @@ if (process.env.HTTP_LOG === "1") {
 }
 
 app.get("/hc", (c) => {
-  console.log("server", c.env.server)
   return c.text("ok")
+})
+
+app.get("/ws", async (c) => {
+  if (!c.env.server.upgrade(c.req.raw, {
+    data: 'im some data for association'
+  })) {
+    logger.error("failed to upgrade!")
+  }
+  return new Response() // have to return empty response so hono doesn't get mad
 })
 
 app.use("/build/*", serveStatic({ root: "./public" }))
@@ -86,12 +94,12 @@ logger.info(`API listening on port ${listenPort}`)
 const server = Bun.serve({
   port: process.env.PORT || "8080",
   fetch: (req: Request, server: Server) => {
-    if (server.upgrade(req, {
-      data: 'im data'
-    })) {
-      // handle authentication
-      return
-    }
+    // if (server.upgrade(req, {
+    //   data: 'im data'
+    // })) {
+    //   // handle authentication
+    //   return
+    // }
     return app.fetch(req, {
       server,
     })
@@ -99,6 +107,7 @@ const server = Bun.serve({
   websocket: {
     message(ws, msg) {
       console.log("got message", ws.data, msg)
+      ws.send("hi")
     },
     open(ws) {
       console.log("websocket opened", ws.data)

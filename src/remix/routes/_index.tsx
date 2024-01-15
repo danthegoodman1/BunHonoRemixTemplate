@@ -15,6 +15,9 @@ export default function Index() {
     setTimeout(() => {
       ws.send("hey")
     }, 1000)
+    ws.onmessage = (msg) => {
+      console.log('got msg', msg.data)
+    }
   }, [])
 
   return (
