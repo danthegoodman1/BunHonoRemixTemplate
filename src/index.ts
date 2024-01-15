@@ -75,22 +75,6 @@ app.get("/hc", (c) => {
   return c.text("ok")
 })
 
-app.get("/ws", async (c) => {
-  // Auth or validation code
-  if (
-    !c.env.server.upgrade(
-      c.req as any, // the needed info works fine
-      {
-        data: {
-          // any extra data you want to pass through to the websocket handler
-        },
-      }
-    )
-  ) {
-    return c.text("I failed to upgrade!")
-  }
-})
-
 app.use("/build/*", serveStatic({ root: "./public" }))
 app.use("*", remix({ build: build as any, mode: process.env.NODE_ENV as any }))
 
@@ -102,13 +86,19 @@ logger.info(`API listening on port ${listenPort}`)
 Bun.serve({
   port: process.env.PORT || "8080",
   fetch: (req: Request, server: Server) => {
+    if (server.upgrade(req, {
+      data: 'im data'
+    })) {
+      // handle authentication
+      return
+    }
     return app.fetch(req, {
       server,
     })
   },
   websocket: {
-    message(ws) {
-      console.log("got message", ws.data)
+    message(ws, msg) {
+      console.log("got message", ws.data, msg)
     },
     open(ws) {
       console.log("websocket opened", ws.data)
