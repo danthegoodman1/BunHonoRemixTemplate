@@ -15,6 +15,7 @@ import * as build from "../build/index.js"
 import { remix } from "remix-hono/handler"
 import { cors } from "hono/cors"
 import { serveStatic } from "hono/bun"
+import { Server } from "bun"
 
 const listenPort = process.env.PORT || "8080"
 
@@ -33,7 +34,11 @@ declare module "hono" {
   }
 }
 
-const app = new Hono()
+const app = new Hono<{
+  Bindings: {
+    server: Server
+  }
+}>()
 app.use(cors())
 
 app.use(async (c, next) => {
@@ -66,7 +71,24 @@ if (process.env.HTTP_LOG === "1") {
 }
 
 app.get("/hc", (c) => {
+  console.log("server", c.env.server)
   return c.text("ok")
+})
+
+app.get("/ws", async (c) => {
+  // Auth or validation code
+  if (
+    !c.env.server.upgrade(
+      c.req as any, // the needed info works fine
+      {
+        data: {
+          // any extra data you want to pass through to the websocket handler
+        },
+      }
+    )
+  ) {
+    return c.text("I failed to upgrade!")
+  }
 })
 
 app.use("/build/*", serveStatic({ root: "./public" }))
@@ -77,7 +99,19 @@ if (process.env.NODE_ENV === "development") {
 }
 logger.info(`API listening on port ${listenPort}`)
 
-export default {
+Bun.serve({
   port: process.env.PORT || "8080",
-  fetch: app.fetch,
-}
+  fetch: (req: Request, server: Server) => {
+    return app.fetch(req, {
+      server,
+    })
+  },
+  websocket: {
+    message(ws) {
+      console.log("got message", ws.data)
+    },
+    open(ws) {
+      console.log("websocket opened", ws.data)
+    },
+  },
+})
