@@ -84,6 +84,7 @@ app.get("/ws", async (c) => {
 })
 
 app.use("/build/*", serveStatic({ root: "./public" }))
+app.use("*", serveStatic({ root: "./src/public" }))
 app.use("*", remix({ build: build as any, mode: process.env.NODE_ENV as any }))
 
 if (process.env.NODE_ENV === "development") {
